@@ -35,4 +35,10 @@ module.exports = {
     width: 800,
     height: 480,
   },
+
+  // Alcuni pannelli e-ink (a seconda del driver/firmware) interpretano il
+  // bianco/nero al contrario rispetto a una normale immagine: se sul display
+  // vedi sfondo scuro e testo illeggibile invece di sfondo bianco e testo
+  // nero, imposta INVERT_DISPLAY=true tra le variabili d'ambiente.
+  invertColors: process.env.INVERT_DISPLAY === 'true',
 };
