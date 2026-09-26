@@ -221,7 +221,7 @@ async function renderDisplay({ netatmo, weather }) {
     let svg = textPath(title, cx, bodyTop, 22, { bold: true, anchor: 'middle' });
     if (icon) svg += icon(cx, bodyTop + 55);
 
-    let y = bodyTop + 100;
+    let y = bodyTop + 90;
     for (const line of lines) {
       const size = line.size || 26;
       const bold = !!line.bold;
@@ -237,14 +237,16 @@ async function renderDisplay({ netatmo, weather }) {
 
   const indoorLines = indoor
     ? [
-        { text: `${fmtTemp(indoor.temperature)}C  ·  ${round(indoor.humidity)}%`, size: 28, bold: true },
+        { text: `${fmtTemp(indoor.temperature)}C`, size: 44, bold: true },
+        { text: `${round(indoor.humidity)}%`, size: 28, bold: true },
         { text: indoor.co2 ? `CO2 ${round(indoor.co2)} ppm` : '', size: 20 },
       ].filter((l) => l.text)
     : [{ text: 'Non ancora configurato', size: 20 }];
 
   const outdoorLines = outdoor
     ? [
-        { text: `${fmtTemp(outdoor.temperature)}C  ·  ${round(outdoor.humidity)}%`, size: 28, bold: true },
+        { text: `${fmtTemp(outdoor.temperature)}C`, size: 44, bold: true },
+        { text: `${round(outdoor.humidity)}%`, size: 28, bold: true },
         {
           text:
             outdoor.battery !== undefined
