@@ -1,56 +1,24 @@
-// Registro (molto semplice, su file JSON) dei device TRMNL che si sono registrati
-// tramite /api/setup. Per un progetto personale con un solo display è più che
-// sufficiente: evita di dover configurare un database solo per questo.
-const fs = require('fs');
-const path = require('path');
+// Identità del device TRMNL: niente più file su disco. In origine salvavamo
+// qui l'api_key generata al primo /api/setup, ma su Hostinger ogni redeploy
+// ricrea la cartella dell'app da zero (giustamente: data/ non è versionata),
+// quindi quella chiave "casuale" spariva ad ogni deploy — il device restava
+// con una chiave che il server, ripartito, non riconosceva più (401 su
+// /api/display, visibile nei log del device come "HTTP Client failed with
+// error: (401)").
+//
+// Soluzione: api_key e friendly_id sono ora derivati in modo DETERMINISTICO
+// dal MAC address, con una funzione di hash. Stesso MAC = sempre la stessa
+// chiave, ad ogni riavvio o redeploy, senza dover salvare nulla da nessuna
+// parte. Non è pensato per proteggere dati sensibili (non ce ne sono: è solo
+// un display meteo), quindi va benissimo così anche senza un "segreto"
+// server-side.
 const crypto = require('crypto');
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data');
-const STORE_FILE = path.join(DATA_DIR, 'devices.json');
-
-function ensureStore() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(STORE_FILE)) fs.writeFileSync(STORE_FILE, JSON.stringify({}, null, 2));
-}
-
-function readAll() {
-  ensureStore();
-  try {
-    return JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
-  } catch (err) {
-    console.error('[deviceStore] file corrotto, lo reinizializzo:', err.message);
-    return {};
-  }
-}
-
-function writeAll(data) {
-  ensureStore();
-  fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2));
-}
-
-/**
- * Registra (o ritrova) un device a partire dal suo MAC address (header "ID"
- * inviato dal firmware su /api/setup). Ritorna sempre lo stesso api_key/friendly_id
- * per lo stesso MAC, così un reset del device non lo fa "riapparire" come nuovo.
- */
 function getOrCreateDevice(macAddress) {
-  const all = readAll();
-  if (all[macAddress]) return all[macAddress];
-
-  const device = {
-    mac: macAddress,
-    apiKey: crypto.randomBytes(16).toString('hex'),
-    friendlyId: macAddress.replace(/:/g, '').slice(-6).toUpperCase(),
-    createdAt: new Date().toISOString(),
-  };
-  all[macAddress] = device;
-  writeAll(all);
-  return device;
+  const mac = String(macAddress).toUpperCase();
+  const apiKey = crypto.createHash('sha256').update(`trmnl-netatmo-display:${mac}`).digest('hex').slice(0, 32);
+  const friendlyId = mac.replace(/:/g, '').slice(-6);
+  return { mac, apiKey, friendlyId };
 }
 
-function findByApiKey(apiKey) {
-  const all = readAll();
-  return Object.values(all).find((d) => d.apiKey === apiKey) || null;
-}
-
-module.exports = { getOrCreateDevice, findByApiKey };
+module.exports = { getOrCreateDevice };

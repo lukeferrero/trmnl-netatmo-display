@@ -95,11 +95,17 @@ router.get('/setup', async (req, res) => {
 
 // --- GET /api/display ---
 // Chiamato periodicamente dal device per sapere quale immagine mostrare.
+//
+// Non serviamo più un registro dei device su file (vedi utils/deviceStore.js):
+// l'api_key è deterministica dal MAC, quindi qui non c'è nulla da "cercare" —
+// basta verificare che il device stia mandando un Access-Token non vuoto.
+// Non è un controllo di sicurezza vero e proprio, ma per questo caso d'uso
+// (un display meteo personale, nessun dato sensibile in gioco) va bene così,
+// ed elimina alla radice il problema del redeploy che cancella data/devices.json.
 router.get('/display', async (req, res) => {
   const apiKey = req.header('Access-Token');
-  const device = apiKey ? deviceStore.findByApiKey(apiKey) : null;
 
-  if (!device) {
+  if (!apiKey) {
     return res.status(401).json({ status: 401, error_detail: 'Access-Token non valido' });
   }
 
