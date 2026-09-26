@@ -1,47 +1,73 @@
 // Genera l'immagine PNG (bianco/nero, adatta a un pannello e-ink) da mostrare
 // sul TRMNL: costruisce un layout come SVG e lo rasterizza con "sharp".
 //
-// I font sono incorporati direttamente nell'SVG (come dati base64) invece di
-// affidarsi ai font di sistema: così l'immagine viene identica sia in locale
-// sia una volta deployata su Hostinger, indipendentemente dai font installati
-// sul server.
+// TESTO: invece di usare <text> con un font incorporato via @font-face,
+// convertiamo ogni stringa direttamente in contorni vettoriali (<path>) con
+// "opentype.js". Su Hostinger il motore che sharp usa per rasterizzare l'SVG
+// non caricava il font incorporato (mostrava un carattere "mancante" identico
+// per ogni lettera, tipo una sequenza di riquadri) — probabilmente perché
+// quella build non supporta @font-face con font in base64. Disegnando noi
+// stessi i contorni delle lettere come forme vettoriali, il risultato non
+// dipende più dal supporto font del rasterizzatore: sono solo poligoni, come
+// le icone meteo qui sotto.
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
+const opentype = require('opentype.js');
 const config = require('../config');
 
-const FONT_REGULAR = fs.readFileSync(
-  path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans.ttf')
+const fontRegular = opentype.parse(
+  fs.readFileSync(path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans.ttf')),
+  { lowMemory: false }
 );
-const FONT_BOLD = fs.readFileSync(
-  path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans-Bold.ttf')
+const fontBold = opentype.parse(
+  fs.readFileSync(path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans-Bold.ttf')),
+  { lowMemory: false }
 );
-const FONT_REGULAR_B64 = FONT_REGULAR.toString('base64');
-const FONT_BOLD_B64 = FONT_BOLD.toString('base64');
 
 const { width: W, height: H } = config.display;
 
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+function pickFont(bold) {
+  return bold ? fontBold : fontRegular;
 }
 
-function fontFaceStyle() {
-  return `
-    @font-face {
-      font-family: 'DejaVu Sans';
-      font-weight: normal;
-      src: url(data:font/ttf;base64,${FONT_REGULAR_B64}) format('truetype');
-    }
-    @font-face {
-      font-family: 'DejaVu Sans';
-      font-weight: bold;
-      src: url(data:font/ttf;base64,${FONT_BOLD_B64}) format('truetype');
-    }
-    text { font-family: 'DejaVu Sans', sans-serif; fill: #000000; }
-  `;
+// NOTA: costruiamo i glifi carattere per carattere con charToGlyph()/advanceWidth
+// invece di usare il metodo "alto livello" font.getPath(stringa, ...): quel
+// metodo passa dal motore di shaping completo di opentype.js (GSUB/legature/
+// bidi), che su alcune tabelle di DejaVu Sans genera un lookup OpenType non
+// supportato dalla libreria e lancia un'eccezione. Per testo semplice
+// italiano/latino non ci servono legature: il percorso "a basso livello" è
+// sufficiente ed evita il problema.
+function textWidth(str, size, bold = false) {
+  const font = pickFont(bold);
+  const scale = size / font.unitsPerEm;
+  let width = 0;
+  for (const ch of String(str ?? '')) {
+    const glyph = font.charToGlyph(ch);
+    width += (glyph.advanceWidth || font.unitsPerEm * 0.6) * scale;
+  }
+  return width;
+}
+
+// Disegna una stringa come <path> agli angoli (x, y = baseline), con
+// allineamento start/middle/end simile a text-anchor in SVG.
+function textPath(str, x, y, size, { bold = false, anchor = 'start' } = {}) {
+  const s = String(str ?? '');
+  if (!s) return '';
+  const font = pickFont(bold);
+  const scale = size / font.unitsPerEm;
+  const width = textWidth(s, size, bold);
+  let cursorX = x;
+  if (anchor === 'middle') cursorX = x - width / 2;
+  else if (anchor === 'end') cursorX = x - width;
+
+  let d = '';
+  for (const ch of s) {
+    const glyph = font.charToGlyph(ch);
+    d += glyph.getPath(cursorX, y, size).toPathData(1);
+    cursorX += (glyph.advanceWidth || font.unitsPerEm * 0.6) * scale;
+  }
+  return `<path d="${d}" fill="#000000"/>`;
 }
 
 // --- Icone meteo, disegnate come semplici forme vettoriali (nessuna dipendenza
@@ -135,19 +161,16 @@ function findModule(readings, type) {
   return readings.find((r) => r.type === type);
 }
 
-// Word-wrap approssimativo (senza dover misurare il testo davvero): usa una
-// larghezza media dei caratteri per DejaVu Sans, sufficiente per evitare che
-// le scritte più lunghe finiscano addosso alla colonna accanto.
+// Word-wrap basato sulla larghezza REALE del testo (misurata con opentype.js
+// sullo stesso font che useremo per disegnarlo), non più su una stima.
 function wrapText(text, maxWidth, fontSize, bold = false) {
-  const avgCharWidth = fontSize * (bold ? 0.62 : 0.55);
-  const maxChars = Math.max(1, Math.floor(maxWidth / avgCharWidth));
   const words = String(text).split(' ');
   const lines = [];
   let current = '';
 
   for (const word of words) {
     const candidate = current ? `${current} ${word}` : word;
-    if (candidate.length > maxChars && current) {
+    if (textWidth(candidate, fontSize, bold) > maxWidth && current) {
       lines.push(current);
       current = word;
     } else {
@@ -195,7 +218,7 @@ async function renderDisplay({ netatmo, weather }) {
   function column(index, title, lines, icon) {
     const x = margin + colWidth * index;
     const cx = x + colWidth / 2;
-    let svg = `<text x="${cx}" y="${bodyTop}" font-size="22" font-weight="bold" text-anchor="middle">${esc(title)}</text>`;
+    let svg = textPath(title, cx, bodyTop, 22, { bold: true, anchor: 'middle' });
     if (icon) svg += icon(cx, bodyTop + 55);
 
     let y = bodyTop + 100;
@@ -204,7 +227,7 @@ async function renderDisplay({ netatmo, weather }) {
       const bold = !!line.bold;
       const wrapped = wrapText(line.text, colInnerWidth, size, bold);
       for (const singleLine of wrapped) {
-        svg += `<text x="${cx}" y="${y}" font-size="${size}" font-weight="${bold ? 'bold' : 'normal'}" text-anchor="middle">${esc(singleLine)}</text>`;
+        svg += textPath(singleLine, cx, y, size, { bold, anchor: 'middle' });
         y += size * 1.25;
       }
       y += 8; // spazio extra tra un "blocco" di dato e il successivo
@@ -215,7 +238,7 @@ async function renderDisplay({ netatmo, weather }) {
   const indoorLines = indoor
     ? [
         { text: `${fmtTemp(indoor.temperature)}C  ·  ${round(indoor.humidity)}% um.`, size: 28, bold: true },
-        { text: indoor.co2 ? `CO₂ ${round(indoor.co2)} ppm` : '', size: 20 },
+        { text: indoor.co2 ? `CO2 ${round(indoor.co2)} ppm` : '', size: 20 },
       ].filter((l) => l.text)
     : [{ text: 'Non ancora configurato', size: 20 }];
 
@@ -262,20 +285,19 @@ async function renderDisplay({ netatmo, weather }) {
       return `
         <g>
           ${weatherIcon(day.category, cx - 60, forecastY, 0.6)}
-          <text x="${cx - 20}" y="${forecastY - 10}" font-size="18" font-weight="bold">${esc(day.weekday)}</text>
-          <text x="${cx - 20}" y="${forecastY + 16}" font-size="18">${fmtTemp(day.tempMax)} / ${fmtTemp(day.tempMin)}</text>
-          <text x="${cx - 20}" y="${forecastY + 38}" font-size="15">Pioggia ${day.precipProbability ?? '—'}%</text>
+          ${textPath(day.weekday, cx - 20, forecastY - 10, 18, { bold: true })}
+          ${textPath(`${fmtTemp(day.tempMax)} / ${fmtTemp(day.tempMin)}`, cx - 20, forecastY + 16, 18)}
+          ${textPath(`Pioggia ${day.precipProbability ?? '—'}%`, cx - 20, forecastY + 38, 15)}
         </g>`;
     })
     .join('\n');
 
   const svg = `
     <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
-      <style>${fontFaceStyle()}</style>
       <rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>
 
-      <text x="${margin}" y="52" font-size="34" font-weight="bold">${esc(dateLabelCapitalized)}</text>
-      <text x="${W - margin}" y="52" font-size="22" text-anchor="end">Aggiornato ${esc(timeLabel)}</text>
+      ${textPath(dateLabelCapitalized, margin, 52, 34, { bold: true })}
+      ${textPath(`Aggiornato ${timeLabel}`, W - margin, 52, 22, { anchor: 'end' })}
       <line x1="${margin}" y1="70" x2="${W - margin}" y2="70" stroke="#000" stroke-width="2"/>
 
       <line x1="${margin + colWidth}" y1="${bodyTop - 30}" x2="${margin + colWidth}" y2="${bodyBottom}" stroke="#000" stroke-width="1"/>
@@ -293,7 +315,7 @@ async function renderDisplay({ netatmo, weather }) {
 
   // IMPORTANTE per la leggibilità su e-ink: niente dithering. Una palette a 2
   // colori generata "al volo" da sharp applica di default un dithering
-  // (sparge il grigio dell'antialiasing dei testi in un rumore di puntini),
+  // (sparge il grigio dell'antialiasing dei bordi in un rumore di puntini),
   // che su un monitor normale si vede appena ma su un pannello e-ink a bassa
   // risoluzione rende il testo un impasto illeggibile. Con .threshold() ogni
   // pixel diventa o bianco o nero in modo netto, senza puntinatura: i bordi
