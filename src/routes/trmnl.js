@@ -55,7 +55,9 @@ async function generateAndSaveImage(req) {
     fs.unlinkSync(path.join(GENERATED_DIR, old));
   }
 
-  return { filename, url: `${publicBaseUrl(req)}/generated/${filename}` };
+  const url = `${publicBaseUrl(req)}/generated/${filename}`;
+  console.log(`[display] image_url generato: ${url} (req.protocol=${req.protocol}, PUBLIC_BASE_URL=${config.publicBaseUrl || '(non impostata)'})`);
+  return { filename, url };
 }
 
 // --- GET /api/setup ---
