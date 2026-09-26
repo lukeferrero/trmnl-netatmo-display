@@ -41,7 +41,8 @@ app.listen(config.port, () => {
   console.log(`NETATMO_CLIENT_ID: ${mask(config.netatmo.clientId)}`);
   console.log(`NETATMO_CLIENT_SECRET: ${mask(config.netatmo.clientSecret)}`);
   console.log(`NETATMO_REFRESH_TOKEN (bootstrap): ${mask(config.netatmo.initialRefreshToken)}`);
-  console.log(`INVERT_DISPLAY: ${config.invertColors}`);
+  console.log(`INVERT_DISPLAY (valore grezzo dall'ambiente): ${JSON.stringify(config.invertDisplayRaw)}`);
+  console.log(`INVERT_DISPLAY (interpretato): ${config.invertColors}`);
   console.log(`REFRESH_RATE_SECONDS: ${config.refreshRateSeconds}`);
   console.log('----------------------------------------');
 });

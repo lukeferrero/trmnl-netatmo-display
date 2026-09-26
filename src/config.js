@@ -7,6 +7,21 @@ function required(name, fallback = undefined) {
   return value;
 }
 
+// Alcuni pannelli di hosting salvano le variabili d'ambiente con spazi,
+// virgolette o maiuscole diverse da quello che l'utente digita (es. "true "
+// con uno spazio finale, o "True", o addirittura '"true"' con le virgolette
+// incluse come caratteri letterali). Un confronto rigido con === 'true'
+// fallisce silenziosamente in questi casi, facendo sembrare che la variabile
+// sia sempre "false" anche quando è stata impostata correttamente lato
+// pannello. Qui puliamo il valore prima di confrontarlo.
+function envBool(name) {
+  const raw = String(process.env[name] ?? '')
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes';
+}
+
 module.exports = {
   port: parseInt(process.env.PORT || '3000', 10),
   timezone: process.env.TZ || 'Europe/Rome',
@@ -40,5 +55,10 @@ module.exports = {
   // bianco/nero al contrario rispetto a una normale immagine: se sul display
   // vedi sfondo scuro e testo illeggibile invece di sfondo bianco e testo
   // nero, imposta INVERT_DISPLAY=true tra le variabili d'ambiente.
-  invertColors: process.env.INVERT_DISPLAY === 'true',
+  invertColors: envBool('INVERT_DISPLAY'),
+
+  // Solo per diagnostica nel log di avvio (vedi server.js): il valore così
+  // come arriva dall'ambiente, senza alcuna elaborazione, per capire cosa
+  // sta effettivamente ricevendo il processo.
+  invertDisplayRaw: process.env.INVERT_DISPLAY,
 };
