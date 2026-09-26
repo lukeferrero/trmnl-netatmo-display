@@ -237,14 +237,14 @@ async function renderDisplay({ netatmo, weather }) {
 
   const indoorLines = indoor
     ? [
-        { text: `${fmtTemp(indoor.temperature)}C  ·  ${round(indoor.humidity)}% um.`, size: 28, bold: true },
+        { text: `${fmtTemp(indoor.temperature)}C  ·  ${round(indoor.humidity)}%`, size: 28, bold: true },
         { text: indoor.co2 ? `CO2 ${round(indoor.co2)} ppm` : '', size: 20 },
       ].filter((l) => l.text)
     : [{ text: 'Non ancora configurato', size: 20 }];
 
   const outdoorLines = outdoor
     ? [
-        { text: `${fmtTemp(outdoor.temperature)}C  ·  ${round(outdoor.humidity)}% um.`, size: 28, bold: true },
+        { text: `${fmtTemp(outdoor.temperature)}C  ·  ${round(outdoor.humidity)}%`, size: 28, bold: true },
         {
           text:
             outdoor.battery !== undefined
@@ -259,7 +259,7 @@ async function renderDisplay({ netatmo, weather }) {
     ? [
         { text: weather.current.label, size: 22, bold: true },
         {
-          text: `Ora ${fmtTemp(weather.current.temperature)}C · ${round(weather.current.humidity)}% um.`,
+          text: `Ora ${fmtTemp(weather.current.temperature)}C · ${round(weather.current.humidity)}%`,
           size: 18,
         },
       ]
