@@ -1,0 +1,23 @@
+{
+  "name": "trmnl-netatmo-display",
+  "version": "1.0.0",
+  "description": "Server BYOS self-hosted per mostrare dati Netatmo, data del giorno e previsioni meteo di Torino su un TRMNL 7.5\" (OG) DIY Kit, senza usare il servizio cloud a pagamento di TRMNL.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "get-netatmo-token": "node scripts/get-netatmo-token.js"
+  },
+  "keywords": [
+    "trmnl",
+    "netatmo",
+    "e-ink",
+    "byos"
+  ],
+  "author": "Luca",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^18.0.4",
+    "express": "^5.2.1",
+    "sharp": "^0.35.4"
+  }
+}
