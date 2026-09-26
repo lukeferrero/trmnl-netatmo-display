@@ -288,10 +288,20 @@ async function renderDisplay({ netatmo, weather }) {
     </svg>
   `;
 
-  const png = await sharp(Buffer.from(svg))
-    .resize(W, H)
-    .grayscale()
-    .png({ palette: true, colors: 2 })
+  let pipeline = sharp(Buffer.from(svg)).resize(W, H).grayscale();
+  if (config.invertColors) pipeline = pipeline.negate({ alpha: false });
+
+  // IMPORTANTE per la leggibilità su e-ink: niente dithering. Una palette a 2
+  // colori generata "al volo" da sharp applica di default un dithering
+  // (sparge il grigio dell'antialiasing dei testi in un rumore di puntini),
+  // che su un monitor normale si vede appena ma su un pannello e-ink a bassa
+  // risoluzione rende il testo un impasto illeggibile. Con .threshold() ogni
+  // pixel diventa o bianco o nero in modo netto, senza puntinatura: i bordi
+  // dei caratteri restano puliti.
+  pipeline = pipeline.threshold(128);
+
+  const png = await pipeline
+    .png({ palette: true, colors: 2, dither: 0 })
     .toBuffer();
 
   return png;
